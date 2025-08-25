@@ -772,14 +772,29 @@ export class CAService {
   }
 
   static startCRLScheduler(): void {
-    const hours = parseInt(process.env.CRL_UPDATE_INTERVAL_HOURS || '24', 10);
-    const intervalMs = Math.max(1, hours) * 60 * 60 * 1000;
-    setInterval(async () => {
-      try {
-        await this.generateCRL();
-      } catch (err) {
-        console.error('CRL scheduler run failed:', err);
-      }
-    }, intervalMs);
+    const globalAny = globalThis as unknown as { __crlSchedulerStarted?: boolean; __crlSchedulerTimer?: any };
+    if (globalAny.__crlSchedulerStarted) {
+      return;
+    }
+
+    let hours = Number(process.env.CRL_UPDATE_INTERVAL_HOURS);
+    if (!Number.isFinite(hours) || hours <= 0) {
+      hours = 24;
+    }
+    const intervalMs = Math.max(1, Math.round(hours)) * 60 * 60 * 1000;
+
+    try {
+      const timer = setInterval(async () => {
+        try {
+          await this.generateCRL();
+        } catch (err) {
+          console.error('CRL scheduler run failed:', err);
+        }
+      }, intervalMs);
+      globalAny.__crlSchedulerStarted = true;
+      globalAny.__crlSchedulerTimer = timer;
+    } catch (err) {
+      console.error('Failed to start CRL scheduler:', err);
+    }
   }
 }
